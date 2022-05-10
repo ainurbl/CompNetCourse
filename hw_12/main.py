@@ -1,5 +1,5 @@
 import json
-from threading import Timer, Thread, Event
+from threading import Thread, Event
 
 json_file_path = 'config.json'
 
@@ -53,7 +53,7 @@ class TGraph:
         return False
 
     def update(self):
-        print(f'Симуляция шага под номером {self.current_step}')
+        print(f'Step {self.current_step} simulation')
 
         graph_changed = False
 
