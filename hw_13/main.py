@@ -1,72 +1,38 @@
-import datetime
+import PySimpleGUI as Gui
+import scapy.all as scapy
 
-import PySimpleGUI as gui
+import util
 
-from util import *
+util.init()
 
-host, port = DEFAULT_HOST, DEFAULT_PORT
-tcp_socket = tcp_socket_init(host, port)
-tcp_socket.listen(1)
 
-window = gui.Window('TCP get', [
-    [gui.Text('Введите IP для получения', size=DEFAULT_GUI_TEXT_SIZE), gui.InputText(host)],
-    [gui.Text('Введите порт для получения', size=DEFAULT_GUI_TEXT_SIZE), gui.InputText(str(port))],
-    [gui.Text('Число полученных пакетов', size=DEFAULT_GUI_TEXT_SIZE), gui.Text(key='count')],
-    [gui.Text('Скорость соединения', size=DEFAULT_GUI_TEXT_SIZE), gui.Text(key='speed')],
-    [gui.Button('Получить')],
+def get_hosts(ip_with_mask):
+    return [(host_info[1].psrc, host_info[1].hwsrc) for host_info in
+            scapy.srp(scapy.Ether(dst=util.DST_MAC) / scapy.ARP(pdst=ip_with_mask), timeout=5)[0]]
+
+
+first_launch = True
+hosts = get_hosts(f'{util.NETWORK_IP}/24')
+
+window = Gui.Window('Find all computers in network', [
+    [Gui.Output(size=(100, 20))],
+    [Gui.Submit('Begin', size=(10, 2)),
+     Gui.ProgressBar(len(hosts), size=(55, 5), key='progress')],
 ])
 
-total = 0
-current = 0
-left_ms = 0
-right_ms = 0
-
 while True:
-    event, values = window.read(100)
-
+    event, values = window.read()
     if event in (None, 'Exit'):
         break
-
-    try:
-        new_host, new_port = values[0], int(values[1])
-    except Exception as e:
-        print(e)
-        continue
-
-    if new_host != host or new_port != port:
-        host, port = new_host, new_port
-        tcp_socket.close()
-        tcp_socket = tcp_socket_init(host, port)
-        tcp_socket.listen(1)
-
-    if event == 'Получить':
-        current = 0
-        left_ms = 0
-
-        recv_tcp_socket = None
-        try:
-            recv_tcp_socket, _ = tcp_socket.accept()
-            total = int(recv_tcp_socket.recv(BATCH_SIZE).decode())
-            for i in range(total):
-                try:
-                    message_time_ms, _ = recv_tcp_socket.recv(BATCH_SIZE).decode().split()
-                    current += 1
-                    if left_ms == 0:
-                        left_ms = int(message_time_ms)
-                except socket.timeout:
-                    pass
-            right_ms = round(datetime.datetime.now().timestamp() * 1000)
-        except Exception as e:
-            print(e)
-        finally:
-            if recv_tcp_socket is not None:
-                recv_tcp_socket.close()
-
-    total_time_ms = right_ms - left_ms
-    speed = 0
-    if total_time_ms > 0:
-        speed = round(BATCH_SIZE * current / total_time_ms)
-    window['speed'].Update(f'{speed} KB/S')
-    window['count'].Update(f'{current} of {total}')
-
-tcp_socket.close()
+    if event == 'Begin' and first_launch:
+        print(f'{"IP address":30}{"MAC address":30}{"Host name":30}')
+        print('Current PC:')
+        print(f'{util.MY_IP:30}{util.MY_MAC:30}{util.MY_HOST_NAME:30}')
+        print('Network:')
+        i = 1
+        for (ip, mac) in hosts:
+            print(f'{ip:30}{mac:30}{util.get_host_name(ip):30}')
+            window['progress'].UpdateBar(i)
+            i += 1
+        first_launch = False
+window.close()
